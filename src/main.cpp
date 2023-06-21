@@ -80,7 +80,8 @@ ISR (TIMER1_COMPA_vect) {
      // Update new frequency word in AD9850, togle fq_ud (writing to PINB toggles pin)
      //   Updates with the new configuration staged in the AD9850 buffer during the
      //   previous interrupt.  Then pre-stage the next frequency word which sits in
-     //   the buffer until the next interrupt.    
+     //   the buffer until the next interrupt.
+     
      PINB = ad_fq_ud;
        //__asm__ __volatile__ ("nop\n\t");  // make sure we have a nice "fat" pulse
      PINB = ad_fq_ud;
