@@ -94,6 +94,7 @@ ISR (TIMER1_COMPA_vect) {
 
      // Toggle clock pin on / off (writing to PINB toggles pin)
      PINB = ad_clk;
+       // Stretch the clock
        //__asm__ __volatile__ ("nop\n\t");
      PINB = ad_clk;
     
