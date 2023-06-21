@@ -191,11 +191,11 @@ int main() {
    Call the setup function to initialize stuff then all the action occurs in the timer
    compare interrupt fuction.  The timer is set to interrupt 64 times per waveform at
    a rate that generates [close to] the desired audio frequency.  Note that in this
-   64 slice version the maximum audio tone is 1500 Hz.  The 32 slice version works to
+   64 slice version the maximum audio tone is 1653Hz.  The 32 slice version works to
    3000 Hz with slightly less fidelity in the resulting demodulated audio wave / tone.
    This is not noticable to my "tin ear" or casual viewing with an oscilloscope but a
    bassoon player might notice.  I suspect a distortion meter can also tell but this is 
-   irrelevant for the generated deviation which is perfect.... if I must say so myself.
+   irrelevant for the generated deviation which is perfect.... if I may say so myself.
   */
   
   setup();
