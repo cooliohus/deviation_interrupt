@@ -24,7 +24,7 @@ union freq_word {
 
 union freq_word fw;        // next 32 bit frequency word to load to AD9850
 int inx = 0;               // 8 bit index into frequency word (0 .. 3)
-uint32_t sine_table[64];   // Frequency words for one sine wave, 64 slices
+uint32_t sine_table[64];   // AD9850 Frequency words for one sine wave, 64 slices
 
 //const float ONEHZ = pow(2,32) / 125000820;
 const float ONEHZ = pow(2,32) / 125000000;
