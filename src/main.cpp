@@ -30,7 +30,7 @@ uint32_t sine_table[64];   // Frequency words for one sine wave, 64 slices
 const float ONEHZ = pow(2,32) / 125000000;
 
 /*
-  FM modulation values for a half wave at 1000 Hz deviation.  A full wave
+  AD9850 FM modulation values for a half wave at 1000 Hz deviation.  A full wave
   table is constructed in the setup function and scaled for the desired
   deviation.  e.g multply by 2.5 for a 2.5kHz deviation
 */
