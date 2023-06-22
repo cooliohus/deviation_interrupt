@@ -1,5 +1,3 @@
-// Added to git repository
-
 #include <Arduino.h>
 #include <avr/io.h>
 
@@ -8,6 +6,23 @@
 #define ad_fq_ud _BV(PB1)
 #define ad_trig _BV(PB0)
 #define mod_disable _BV(PB4)
+
+/*
+ Data pins for the AD9850 are assigned as follows
+
+    AD9850  mega328P Ports
+    ------  ------------------
+    d0..d5  PC0..PC5
+    d6..d7  PD6..PD7
+
+ The reason for splitting bit asssignments between ports is the B, C, and D ports all have
+ some reserved bits so there is not 8 consecutive port bits [rats]
+*/
+
+
+// Change for 32 or 64 sample / slice versions
+#define s32
+//#define s64
 
 /*
 // stuff for rotary encoder... if I ever get to it :-)
@@ -24,7 +39,12 @@ union freq_word {
 
 union freq_word fw;        // next 32 bit frequency word to load to AD9850
 int inx = 0;               // 8 bit index into frequency word (0 .. 3)
-uint32_t sine_table[64];   // AD9850 Frequency words for one sine wave, 64 slices
+
+#ifdef s32
+uint32_t sine_table[32];   // Frequency words for one sine wave, 32 slices
+#else
+uint32_t sine_table[64];   // Frequency words for one sine wave, 64 slices
+#endif
 
 //const float ONEHZ = pow(2,32) / 125000820;
 const float ONEHZ = pow(2,32) / 125000000;
@@ -34,13 +54,22 @@ const float ONEHZ = pow(2,32) / 125000000;
   table is constructed in the setup function and scaled for the desired
   deviation.  e.g multply by 2.5 for a 2.5kHz deviation
 */
+
+#ifdef s32  // 32 sample version
+const uint32_t sines1000[] {
+     0,6703,13149,19089,
+    24296,28569,31745,33700,
+    34360,33700,31745,28569,
+    24296,19089,13149,6703
+    };
+#else  // 64 sample version
 const uint32_t sines1000[] {
     0,3368,6703,9974,13149,16197,19089,21798,
     24296,26560,28569,30303,31744,32880,33700,34194,
     34360,34194,33700,32880,31744,30303,28569,26560,
     24296,21798,19089,16197,13149,9974,6703,3368
     };
-
+#endif
 /*
   program the AD9850 to generate FM modulation around a 20 mHz center
   frequency.  That will put the second image (fundamental + 125 mHz clock)
@@ -74,18 +103,12 @@ void ad9850_par_load_mode() {
 }
 
 ISR (TIMER1_COMPA_vect) {
+     /* Timer compare interrupt.  occurs 32 or 64 times per sine wave
+        depending on the version
+     */
      
      PORTB |= ad_trig;  // set scope trigger pin PB0
-      
-     // Update new frequency word in AD9850, togle fq_ud (writing to PINB toggles pin)
-     //   Updates with the new configuration staged in the AD9850 buffer during the
-     //   previous interrupt.  Then pre-stage the next frequency word which sits in
-     //   the buffer until the next interrupt.
      
-     PINB = ad_fq_ud;
-       //__asm__ __volatile__ ("nop\n\t");  // make sure we have a nice "fat" pulse
-     PINB = ad_fq_ud;
-
      // load next frequency word from table
      fw.l = sine_table[inx];
 
@@ -94,10 +117,10 @@ ISR (TIMER1_COMPA_vect) {
      PORTD &= 0x3f;
 
      // Toggle clock pin on / off (writing to PINB toggles pin)
-     PINB = ad_clk;
+     PINB = ad_clk;  // clock pin high
        // Stretch the clock
        //__asm__ __volatile__ ("nop\n\t");
-     PINB = ad_clk;
+     PINB = ad_clk;  // clock pin low
     
      // write 32 bit frequency word
      for (int j=3;j > -1;j--) {
@@ -105,34 +128,45 @@ ISR (TIMER1_COMPA_vect) {
           PORTD &= 0x3f;
           PORTD |= (fw.s[j] & 0xc0);
           PINB = ad_clk;
+            // stretch clock pulse
             //__asm__ __volatile__ ("nop\n\t");
           PINB = ad_clk;
      }
 
      // Update new frequency word in AD9850, togle fq_ud (writing to PINB toggles pin)
-     /*
      PINB = ad_fq_ud;
        //__asm__ __volatile__ ("nop\n\t");
      PINB = ad_fq_ud;
-    */
 
-     // Update frequency table pointer to next value, "zero out" if > 63
+#ifdef s32
+     // Update frequency table pointer to next value, set to zero if > 31
+     inx = (inx + 1) & 0x1F;
+#else
+     // Update frequency table pointer to next value, set to zero if > 63
      inx = (inx + 1) & 0x3F;
-            
+#endif
+
      PORTB &= ~(ad_trig);   // reset scope trigger pin
 
-}    // ISR
+}    // end of ISR
 
 void setup() {
   
   const float deviation = 2.5;   // set the desired deviation in KHz
 
   // initialize the FM waveform generator table  
+#ifdef s32
+  for (int i = 0;i < 16;i++) {
+    sine_table[i] = base_freq + sines1000[i] * deviation;
+    sine_table[i+16] = base_freq - sines1000[i] * deviation;
+  }    
+#else
   for (int i = 0;i < 32;i++) {
+
     sine_table[i] = base_freq + sines1000[i] * deviation;
     sine_table[i+32] = base_freq - sines1000[i] * deviation;
-    ;
   }
+#endif  
 
 // Set up timer 1 which controls modulation (audio) frequency
 
@@ -150,11 +184,26 @@ void setup() {
   // Enable interrupt on compare match
   TIMSK1 |= (1 << OCIE1A);
 
+#ifdef s32
+// ***** compare register values for interesting frequencies
+  //OCR1A = 1500;     // 416 hz   1000 Hz deviation  *****
+  //OCR1A = 1000;     // 624 hz   1500 Hz deviation  *****
+  //OCR1A = 751;      // 832 hz   2000 Hz deviation  *****
+  //OCR1A = 600;      // 1040 hz  2500 Hz deviation  *****
+  //OCR1A = 501;      // 1247 Hz  3000 Hz deviation  *****
+
+  // OCR1A = 6245;     //100 hz
+  // OCR1A = 1248;     // 500 hz
+   //OCR1A = 624;      //1000 hz
+   OCR1A = 416;      //1500 hz
+  // OCR1A = 311;      //2000 hz
+  // OCR1A = 250;      //2500 hz
+#else
 // ***** compare register values for interesting frequencies
   //OCR1A = 624;      // 500 hz
   //OCR1A = 312;      // 1000 hz
-  //OCR1A = 207;      // 1500 hz
-  OCR1A = 188;      // testing, 189 / 1653 Hz is as far as we can go... at 20 mHz
+  OCR1A = 207;      // 1500 hz
+  //OCR1A = 188;      // testing, 189 / 1653 Hz is as far as we can go... at 20 mHz
 
 // ***** compare register  values for bessel null frequencies  
   //OCR1A = 750;      // 416 hz   1000 Hz deviation  *****
@@ -162,6 +211,7 @@ void setup() {
   //OCR1A = 375;      // 832 hz   2000 Hz deviation  *****
   //OCR1A = 300;      // 1040 hz  2500 Hz deviation  *****
   //OCR1A = 250;      // 1247 Hz  3000 Hz deviation  *****
+#endif
 
 // disable timer 0 and 2 interrupts.
   TIMSK0 = 0;
@@ -202,7 +252,10 @@ int main() {
   
   setup();
   
-  while (true) { }  // loop forever
+  while (true) {
+     ;
+    }  // loop forever
+
   return(0);        // never get here.
 
 } // end of main()
